@@ -17,7 +17,7 @@ public class RobotPlayer {
 	public static void run(RobotController unit){
 		
 		//rc = unit;
-		rnd = new Random(rc.getID());
+		rnd = new Random(unit.getID());
 		
 		while(true){
 			try{
