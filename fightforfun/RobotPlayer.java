@@ -11,12 +11,12 @@ public class RobotPlayer {
 	static int infinity = 10000;
 	
 	static int MOVE = 1234;
+
 	
-	iBehaviour behaviour;
-	
+
 	public static void run(RobotController unit){
 		
-		rc = unit;
+		//rc = unit;
 		rnd = new Random(rc.getID());
 		
 		while(true){
@@ -24,27 +24,30 @@ public class RobotPlayer {
 				switch(unit.getType())
 				{
 					case ARCHON:
-						ArchonLogic();
+						ArchonBehaviour.makeTurn(unit);
+						//ArchonLogic();
 						break;
 						
 					case GUARD:
-						GuardLogic();
+						GuardBehaviour.makeTurn(unit);
 						break;
 						
 					case SCOUT:
-						ScoutLogic();
+						ScoutBehaviour.makeTurn(unit);
 						break;
 						
 					case TURRET:
-						TurretLogic();
+						TurretBehaviour.makeTurn(unit);
 						break;
-						
+					case TTM:
+						TTMBehaviour.makeTurn(unit);
+						break;
 					case SOLDIER:
-						SoldierLogic();
+						SoldierBehaviour.makeTurn(unit);
 						break;
 						
 					case VIPER:
-						ViperLogic();
+						ViperBehaviour.makeTurn(unit);
 						break;
 						
 					default:
