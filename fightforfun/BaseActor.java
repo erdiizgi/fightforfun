@@ -11,6 +11,16 @@ public abstract class BaseActor {
     protected Random rng;
     protected RobotController rc;
     private int squadId;
+    protected Direction[] directions = {
+    		Direction.NORTH, 
+    		Direction.NORTH_EAST, 
+    		Direction.EAST, 
+    		Direction.SOUTH_EAST,
+            Direction.SOUTH, 
+            Direction.SOUTH_WEST, 
+            Direction.WEST, 
+            Direction.NORTH_WEST};
+    
     protected BaseActor(RobotController rc, int squadId) {
         this.rc = rc;
         this.rng = new Random(rc.getID());

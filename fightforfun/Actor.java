@@ -18,6 +18,8 @@ public class Actor {
                     return new TurretActor(rc, 0);
                 case SOLDIER:
                     return new SoldierActor(rc, 0);
+                case VIPER:
+                	return new ViperActor(rc, 0);
                 default:
                     rc.setIndicatorString(1, "!! Casting failed !!");
                     while(true) { Clock.yield(); }
