@@ -13,13 +13,15 @@ public class Actor {
                 case ARCHON:
                     return new ArchonActor(rc, 0);
                 case GUARD:
-                    return new GuardActor(rc, 0);
+                    return new GuardActor(rc, 1);
                 case TURRET:
-                    return new TurretActor(rc, 0);
+                    return new TurretActor(rc, 2);
                 case SOLDIER:
-                    return new SoldierActor(rc, 0);
+                    return new SoldierActor(rc, 3);
                 case VIPER:
-                	return new ViperActor(rc, 0);
+                	return new ViperActor(rc, 4);
+                case SCOUT:
+                    return new ScoutActor(rc, 5);
                 default:
                     rc.setIndicatorString(1, "!! Casting failed !!");
                     while(true) { Clock.yield(); }

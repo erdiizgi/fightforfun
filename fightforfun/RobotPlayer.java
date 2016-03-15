@@ -4,14 +4,16 @@ import battlecode.common.*;
 
 public class RobotPlayer {
 
-	public static void run(RobotController unit){
+	public static void run(RobotController unit) {
 
 		BaseActor actor = Actor.CastRobot(unit);
-		if(actor == null)
+		if (actor == null)
 			return;
 		actor.loop();
 
-		unit.setIndicatorString(2, "!! Robot ended its run() method. !!");
-		while(true) { Clock.yield(); }
+		unit.setIndicatorString(0, "!! Robot ended its run() method. !!");
+		while (true) {
+			Clock.yield();
+		}
 	}
 }

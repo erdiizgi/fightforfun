@@ -17,8 +17,18 @@ public class Protocol {
         PLAIN
     }
 
-    private static final int TYPE_MASK = 0b00000011;
+    public enum Order
+    {
+        ATTACK,
+        PROTECT,
+        SCATTER,
+        ADVANCE,
+    }
+
+    private static int MAX_MAP_SIZE = 80;
+
     private static final int TYPE_SHIFT = 30;
+    private static final int TYPE_MASK = 0b11;
     private static final int LOCATION_X_SHIFT = 22;
     private static final int LOCATION_X_MASK = 0b11111111;
     private static final int LOCATION_Y_SHIFT = 14;
@@ -30,8 +40,11 @@ public class Protocol {
     private static final int SQUAD_ID_MASK = ROBOT_ID_MASK;
     private static final int SQUAD_ID_SHIFT = ROBOT_ID_SHIFT;
 
+    private static final int ORDER_MASK = 30;
+    private static final int ORDER_SHIFT = 0b11;
+
     public static int prepareSignalType(Type type) {
-        return type.ordinal() << TYPE_SHIFT;
+        return (type.ordinal() & TYPE_MASK) << TYPE_SHIFT;
     }
     public static int prepareBroadcastSignalData() {
         return SQUAD_ID_MASK | (1 << SQUAD_OR_ROBOT_MASK);
@@ -44,6 +57,9 @@ public class Protocol {
     }
     public static int prepareMapLocationSignalData(MapLocation location) {
         return ((location.x & LOCATION_X_MASK) << LOCATION_X_SHIFT) | ((location.y & LOCATION_Y_MASK) << LOCATION_Y_SHIFT);
+    }
+    public static int prepareOrderSignalPayload(Order order) {
+        return (order.ordinal() & ORDER_MASK) << ORDER_SHIFT;
     }
 
     public static Type getSignalType(Signal s)
@@ -64,11 +80,26 @@ public class Protocol {
     public static int getBroadcastSquadId() {
         return SQUAD_ID_MASK;
     }
+    private static int clampCoordinate(int coord, int reference) {
+        if(coord - reference >= MAX_MAP_SIZE)
+            coord -= LOCATION_X_MASK + 1;
+        if(coord - reference <= -MAX_MAP_SIZE)
+            coord += LOCATION_X_MASK + 1;
+        return coord;
+    }
     public static MapLocation getSignalDataMapLocation(int firstWord, MapLocation reference) {
-        return new MapLocation(((firstWord >>> LOCATION_X_SHIFT) & LOCATION_X_MASK) + (reference.x & ~LOCATION_X_MASK), ((firstWord >>> LOCATION_Y_SHIFT) & LOCATION_Y_MASK) + (reference.y & ~LOCATION_Y_MASK));
+        final int x = ((firstWord >>> LOCATION_X_SHIFT) & LOCATION_X_MASK) | (reference.x & ~LOCATION_X_MASK);
+        final int y = ((firstWord >>> LOCATION_Y_SHIFT) & LOCATION_Y_MASK) | (reference.y & ~LOCATION_Y_MASK);
+        final int clampedX = clampCoordinate(x, reference.x);
+        final int clampedY = clampCoordinate(y, reference.y);
+        return new MapLocation(clampedX, clampedY);
     }
     public static boolean isSquadIdSignalData(int firstWord)
     {
         return ((firstWord >>> SQUAD_OR_ROBOT_SHIFT) & SQUAD_OR_ROBOT_MASK) == 1;
+    }
+    public static Order getSignalOrder(int secondWord)
+    {
+        return Order.values()[(secondWord >>> ORDER_SHIFT) & ORDER_MASK];
     }
 }
