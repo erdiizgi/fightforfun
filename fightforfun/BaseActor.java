@@ -85,6 +85,7 @@ public abstract class BaseActor {
     protected void orderedToScatter(int robotId, MapLocation fromWhere) throws GameActionException { this.ordered(robotId, fromWhere); }
     protected void orderedToProtect(int robotId, MapLocation where) throws GameActionException { this.ordered(robotId, where); }
     protected void orderedToAttack(int robotId, MapLocation where) throws GameActionException { this.ordered(robotId, where); }
+    protected void recievedKnowledge(Signal signal)throws GameActionException {};
 
     protected void init() throws GameActionException {}
     protected void flap() throws GameActionException {}
@@ -133,6 +134,7 @@ public abstract class BaseActor {
                             break;
                         case KNOWLEDGE:
                             this.rc.setIndicatorString(0, "Received knowledge.");
+                            this.recievedKnowledge(s);
                             break;
                         default:
                             this.rc.setIndicatorString(0, "Received unknown signal " + (contents[0] >>> 30) + ".");
@@ -173,6 +175,18 @@ public abstract class BaseActor {
     public boolean canMove() {
         return rc.isCoreReady();
     }
+
+    protected void randomMove(){
+            Direction d = directions[(int) (8 * Math.random())];
+            if (rc.canMove(d) && rc.isCoreReady()) {
+                try {
+                    rc.move(d);
+                } catch (GameActionException e) {
+                    e.printStackTrace();
+                }
+            }
+    }
+
     public boolean move(Direction direction, boolean canClear) throws GameActionException {
         if(!canMove())
             return false;

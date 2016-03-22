@@ -1,14 +1,32 @@
 package fightforfun;
 
 import battlecode.common.*;
+import scala.Int;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Created by MichalMojzik on 10.03.2016.
  */
 public class ArchonActor extends BaseActor {
-    public ArchonActor(RobotController rc, int squadId) { super(rc, squadId); blockedTurnCounter = 0; }
+    public ArchonActor(RobotController rc, int squadId) { super(rc, squadId);
+		blockedTurnCounter = 0; behaviour = BehaviourMode.BUILD; }
 
     private int blockedTurnCounter;
+
+	private final int dyingHealth = 100;
+
+	private enum BehaviourMode{
+		BUILD, ROAM
+	}
+	private BehaviourMode behaviour;
+	private Collection<UnitInfo> otherArchons;
+	private UnitInfo mainArchon;
+
+
     protected static Direction[] directions = {
     		Direction.NORTH, 
     		Direction.NORTH_EAST, 
@@ -21,8 +39,35 @@ public class ArchonActor extends BaseActor {
 
     @Override
     protected void act() throws GameActionException {
-    	
-        if(rc.isCoreReady() && rc.hasBuildRequirements(RobotType.SOLDIER)){
+		switch(behaviour){
+			case BUILD:// if we are building... then :
+				if(rc.isCoreReady() && rc.hasBuildRequirements(RobotType.SOLDIER)) {
+					Direction randomDir = randomDirection();
+					int cnt = 0;
+					while ((!rc.canBuild(randomDir, RobotType.SOLDIER)) && cnt < 8) {
+						randomDir = randomDir.rotateLeft();
+						cnt++;
+					}
+
+					if (cnt >= 8)
+						this.orderAll(++blockedTurnCounter * blockedTurnCounter, rc.getLocation());
+					else {
+						if (randomDir.isDiagonal() || !rc.hasBuildRequirements(RobotType.GUARD))
+							rc.build(randomDir, RobotType.GUARD);
+						else if (rc.canBuild(randomDir, RobotType.SOLDIER))
+							rc.build(randomDir, RobotType.SOLDIER);
+						blockedTurnCounter = 0;
+					}
+				}
+				break;
+			case ROAM:
+				// nothing special to do...
+				break;
+		}
+		this.tryRepairAlly();
+		this.tryConvertNeutrals();
+		this.tryMove();
+        /*if(rc.isCoreReady() && rc.hasBuildRequirements(RobotType.SOLDIER)){
             Direction randomDir = randomDirection();
             int cnt = 0;
             while((!rc.canBuild(randomDir, RobotType.SOLDIER)) && cnt<8){
@@ -43,10 +88,64 @@ public class ArchonActor extends BaseActor {
         
         this.tryRepairAlly();
         this.tryConvertNeutrals();
-        this.tryMove();
+        this.tryMove();*/
     }
-    
-    private void tryRepairAlly() throws GameActionException {
+
+	@Override
+	protected void init() throws GameActionException
+	{
+		mainArchon = new UnitInfo(rc.getID(), rc.getLocation());// until we know other weare mainArchon :D
+		otherArchons = new ArrayList<UnitInfo>();
+
+
+
+		// send message to other archons with ours id
+		rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
+
+	}
+
+	@Override
+	protected void cut() throws GameActionException {
+		super.cut();
+		if(rc.getHealth() < dyingHealth){
+			// send message to other archons with ours id
+			rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
+			this.behaviour = BehaviourMode.ROAM;
+		}
+	}
+
+	@Override
+	protected void recievedKnowledge(Signal signal) throws GameActionException {
+		// if I receive knowledge of archon ID
+		UnitInfo newArchon = new UnitInfo(signal);
+
+		if(otherArchons.contains(newArchon)){
+			// archon died...
+			otherArchons.remove(newArchon);
+		}else {
+			otherArchons.add(newArchon);
+		}
+
+		// if I receive knowledge of dying archon
+			// decrease archon count
+			// remove given archon from archonList
+
+		/// IF WE HAVE MINIMAL ID FROM ARCHONS:
+		//if(otherArchons.size() >= archonCount-1){
+			UnitInfo minArchon = Collections.min(otherArchons);
+			if(rc.getID() <= minArchon.id){// we have minimal ID;
+				behaviour = BehaviourMode.BUILD;
+				this.rc.setIndicatorString(0, "Assigned as main archon.");
+				mainArchon = new UnitInfo(rc.getID(), rc.getLocation());
+			}else{
+				behaviour = BehaviourMode.ROAM;
+				this.rc.setIndicatorString(0, "Assigned as roaming archon.");
+				mainArchon = minArchon;
+			}
+		//}
+	}
+
+	private void tryRepairAlly() throws GameActionException {
 		RobotInfo[] healableAllies = rc.senseNearbyRobots(RobotType.ARCHON.attackRadiusSquared, rc.getTeam());
 		MapLocation bestLoc = null;
 		double lowestHealth = 10000;
@@ -113,7 +212,7 @@ public class ArchonActor extends BaseActor {
 	    }
     }
     
-    //TODO randommove is not so good, because it moves around, we should use signals from scouts
+    /*//TODO randommove is not so good, because it moves around, we should use signals from scouts
     private void randomMove(){
     	if(Math.random() < 0.5){
 			Direction d = directions[(int) (8 * Math.random())];
@@ -125,7 +224,7 @@ public class ArchonActor extends BaseActor {
 				}
 			}
 		}
-    }
+    }*/
     
     private void tryConvertNeutrals() throws GameActionException {
 		if (!rc.isCoreReady()) return;

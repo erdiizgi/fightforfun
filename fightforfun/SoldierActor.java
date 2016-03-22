@@ -6,6 +6,8 @@ import battlecode.common.*;
  * Created by MichalMojzik on 11.03.2016.
  */
 public class SoldierActor extends BaseActor {
+    private int unactiveTurns;
+    private final int unactiveTurnsTreshold = 150;
     public SoldierActor(RobotController rc, int squadId) { super(rc, squadId); }
 
     private Direction scatterDirection;
@@ -16,17 +18,29 @@ public class SoldierActor extends BaseActor {
     }
 
     @Override
+    protected void init() throws GameActionException {
+        super.init();
+        unactiveTurns = 0;
+    }
+    
+
+
+    @Override
     protected void act() throws GameActionException {
 
         RobotInfo[] enemies = this.getNearbyHostiles(false);
         if(scatterDirection != null)
-            if(this.move(scatterDirection, false))
+            if(this.move(scatterDirection, false)) {
+                unactiveTurns = 0;
                 scatterDirection = null;
+            }
 
         if(this.canAttack()) {
             for (RobotInfo enemy : enemies) {
-                if (this.attack(enemy))
+                if (this.attack(enemy)) {
+                    unactiveTurns = 0;
                     break;
+                }
             }
         }
 
@@ -41,12 +55,21 @@ public class SoldierActor extends BaseActor {
                 else
                     break;
 
-                if (this.move(movementDirection, true))
+                if (this.move(movementDirection, true)) {
+                    unactiveTurns = 0;
                     break;
+                }
             }
         }
 
-        if(scatterDirection != null)
+        if(scatterDirection != null) {
             this.clearRubble(scatterDirection);
+            unactiveTurns = 0;
+        }
+        ++unactiveTurns;
+        if(unactiveTurns > unactiveTurnsTreshold){
+            unactiveTurns = 0;
+            this.randomMove();
+        }
     }
 }
