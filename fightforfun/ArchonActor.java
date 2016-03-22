@@ -61,7 +61,16 @@ public class ArchonActor extends BaseActor {
 				}
 				break;
 			case ROAM:
-				// nothing special to do...
+				// i ll try to move away from enemies if I see them:
+				RobotInfo[] enemies = this.getNearbyHostiles(false);
+
+				if(enemies.length > 0 ){
+					Direction movementDirection = rc.getLocation().directionTo(enemies[0].location);
+					movementDirection = movementDirection.opposite();
+					if (this.move(movementDirection, true)) {
+
+					}
+				}
 				break;
 		}
 		this.tryRepairAlly();
@@ -100,7 +109,7 @@ public class ArchonActor extends BaseActor {
 
 
 		// send message to other archons with ours id
-		rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
+		rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, this.maxDistanceSquared(rc.getInitialArchonLocations(rc.getTeam())));
 
 	}
 
@@ -112,6 +121,17 @@ public class ArchonActor extends BaseActor {
 			rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
 			this.behaviour = BehaviourMode.ROAM;
 		}
+	}
+
+	private int maxDistanceSquared(MapLocation[] locations){
+		int max = Integer.MIN_VALUE;
+		for (MapLocation loc : locations) {
+			int currentDist = rc.getLocation().distanceSquaredTo(loc);
+			if(currentDist > max){
+				max = currentDist;
+			}
+		}
+		return max;
 	}
 
 	@Override
@@ -131,7 +151,6 @@ public class ArchonActor extends BaseActor {
 			// remove given archon from archonList
 
 		/// IF WE HAVE MINIMAL ID FROM ARCHONS:
-		//if(otherArchons.size() >= archonCount-1){
 			UnitInfo minArchon = Collections.min(otherArchons);
 			if(rc.getID() <= minArchon.id){// we have minimal ID;
 				behaviour = BehaviourMode.BUILD;
@@ -142,7 +161,6 @@ public class ArchonActor extends BaseActor {
 				this.rc.setIndicatorString(0, "Assigned as roaming archon.");
 				mainArchon = minArchon;
 			}
-		//}
 	}
 
 	private void tryRepairAlly() throws GameActionException {

@@ -7,7 +7,7 @@ import battlecode.common.*;
  */
 public class SoldierActor extends BaseActor {
     private int unactiveTurns;
-    private final int unactiveTurnsTreshold = 150;
+    private final int unactiveTurnsTreshold = 80;
     public SoldierActor(RobotController rc, int squadId) { super(rc, squadId); }
 
     private Direction scatterDirection;
@@ -22,11 +22,13 @@ public class SoldierActor extends BaseActor {
         super.init();
         unactiveTurns = 0;
     }
-    
+
 
 
     @Override
     protected void act() throws GameActionException {
+
+        ++unactiveTurns;
 
         RobotInfo[] enemies = this.getNearbyHostiles(false);
         if(scatterDirection != null)
@@ -66,10 +68,14 @@ public class SoldierActor extends BaseActor {
             this.clearRubble(scatterDirection);
             unactiveTurns = 0;
         }
-        ++unactiveTurns;
+
         if(unactiveTurns > unactiveTurnsTreshold){
             unactiveTurns = 0;
             this.randomMove();
+        }
+
+        if(unactiveTurns > 1) {
+            this.rc.setIndicatorString(0, "Unactive for" + unactiveTurns + "turns.");
         }
     }
 }
