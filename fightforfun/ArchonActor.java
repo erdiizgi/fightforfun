@@ -17,10 +17,32 @@ public class ArchonActor extends BaseActor {
 
     private int blockedTurnCounter;
 
-	private final int dyingHealth = 100;
+	private static final int CALLOUT_MOVEMENT_THRESHOLD = 20;
+	private int movedCounter = 0;
+	public boolean move(Direction direction, boolean canClear) throws GameActionException {
+		if(super.move(direction, canClear)) {
+			++movedCounter;
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	private int bigCalloutPauseCounter = 0;
+	private static final int BIG_CALLOUT_PAUSE = 200;
+	private static final int BIG_CALLOUT_PAUSE_CALLOUT_INCREMENT = 20;
+
+	private int maxFriendliesSeenMult = 0;
+	private static final int FRIENDLIES_SEEN_MULTIPLIER = 100;
+	private static final int FRIENDLIES_SEEN_THRESHOLD_FRAC_MULT = 1;
+	private static final int FRIENDLIES_SEEN_THRESHOLD_FRAC_DIV = 2;
+
+	private final int dyingHealth = 50;
+	private final int timidHealth = 300;
+	private boolean underAttack = false;
 
 	private enum BehaviourMode{
-		BUILD, ROAM
+		BUILD, SUPPLEMENT_BUILD, ROAM
 	}
 	private BehaviourMode behaviour;
 	private Collection<UnitInfo> otherArchons;
@@ -39,7 +61,28 @@ public class ArchonActor extends BaseActor {
 
     @Override
     protected void act() throws GameActionException {
+
+		this.exploreNeutrals();
+
+		switch(behaviour) {
+			case SUPPLEMENT_BUILD:
+				if(!rc.hasBuildRequirements(RobotType.SOLDIER))
+					behaviour = BehaviourMode.ROAM;
+				break;
+			case ROAM:
+				if(rc.hasBuildRequirements(RobotType.SOLDIER)) {
+					for (RobotInfo friendly : getNearbyFriendlies()) {
+						if (friendly.type == RobotType.ARCHON) {
+							behaviour = BehaviourMode.SUPPLEMENT_BUILD;
+							break;
+						}
+					}
+				}
+			default:
+				break;
+		}
 		switch(behaviour){
+			case SUPPLEMENT_BUILD:
 			case BUILD:// if we are building... then :
 				if(rc.isCoreReady() && rc.hasBuildRequirements(RobotType.SOLDIER)) {
 					Direction randomDir = randomDirection();
@@ -50,7 +93,7 @@ public class ArchonActor extends BaseActor {
 					}
 
 					if (cnt >= 8)
-						this.orderAll(++blockedTurnCounter * blockedTurnCounter, rc.getLocation());
+						this.orderAll(++blockedTurnCounter * blockedTurnCounter + 1, rc.getLocation());
 					else {
 						if (randomDir.isDiagonal() || !rc.hasBuildRequirements(RobotType.GUARD))
 							rc.build(randomDir, RobotType.GUARD);
@@ -58,24 +101,38 @@ public class ArchonActor extends BaseActor {
 							rc.build(randomDir, RobotType.SOLDIER);
 						blockedTurnCounter = 0;
 					}
-				}
+				}/* else {
+					boolean isBlocked = true;
+					for(Direction direction : Direction.values()) {
+						RobotInfo robotAtDirection = rc.senseRobotAtLocation(rc.getLocation().add(direction));
+						if(robotAtDirection == null) {
+							isBlocked = false;
+						}
+					}
+
+					if(isBlocked)
+						this.orderAll(++blockedTurnCounter * blockedTurnCounter + 1, rc.getLocation());
+				}*/
 				break;
 			case ROAM:
-				// i ll try to move away from enemies if I see them:
 				RobotInfo[] enemies = this.getNearbyHostiles(false);
+				if(rc.getHealth() < timidHealth || enemies.length > 5 || rc.isInfected()) {
+					// i ll try to move away from enemies if I see them:
 
-				if(enemies.length > 0 ){
-					Direction movementDirection = rc.getLocation().directionTo(enemies[0].location);
-					movementDirection = movementDirection.opposite();
-					if (this.move(movementDirection, true)) {
+					if (enemies.length > 0) {
+						Direction movementDirection = rc.getLocation().directionTo(enemies[0].location);
+						movementDirection = movementDirection.opposite();
+						if (this.move(movementDirection, false)) {
 
+						}
 					}
 				}
 				break;
 		}
-		this.tryRepairAlly();
-		this.tryConvertNeutrals();
-		this.tryMove();
+
+		if(!this.tryRepairAlly())
+			this.tryMove();
+
         /*if(rc.isCoreReady() && rc.hasBuildRequirements(RobotType.SOLDIER)){
             Direction randomDir = randomDirection();
             int cnt = 0;
@@ -103,20 +160,100 @@ public class ArchonActor extends BaseActor {
 	@Override
 	protected void init() throws GameActionException
 	{
-		mainArchon = new UnitInfo(rc.getID(), rc.getLocation());// until we know other weare mainArchon :D
-		otherArchons = new ArrayList<UnitInfo>();
+		bigCalloutPauseCounter = BIG_CALLOUT_PAUSE;
 
-
+		mainArchon = null;
+		if(rc.getRoundNum() == 0)
+		{
+			MapLocation[] initialLocations = rc.getInitialArchonLocations(rc.getTeam());
+			if(initialLocations[initialLocations.length - 1].equals(rc.getLocation())) {
+				behaviour = BehaviourMode.BUILD;
+				this.rc.setIndicatorString(0, "Assigned as main archon.");
+				mainArchon = new UnitInfo(rc.getID(), rc.getLocation());
+				rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, this.maxDistanceSquared(rc.getInitialArchonLocations(rc.getTeam())));
+			}
+			else if(initialLocations.length > 2 && initialLocations[0].equals(rc.getLocation()))
+			{
+				behaviour = BehaviourMode.SUPPLEMENT_BUILD;
+				this.rc.setIndicatorString(0, "Assigned as supplemental archon.");
+			}
+			else {
+				behaviour = BehaviourMode.ROAM;
+				this.rc.setIndicatorString(0, "Assigned as roaming archon.");
+			}
+		}
+		else {
+			behaviour = BehaviourMode.ROAM;
+			mainArchon = new UnitInfo(-1, rc.getLocation());
+		}
 
 		// send message to other archons with ours id
-		rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, this.maxDistanceSquared(rc.getInitialArchonLocations(rc.getTeam())));
 
 	}
 
 	@Override
 	protected void cut() throws GameActionException {
 		super.cut();
-		if(rc.getHealth() < dyingHealth){
+
+		boolean callout = false;
+		boolean bigCallout = false;
+
+		RobotInfo[] seenHostiles = getNearbyHostiles(false);
+		RobotInfo[] seenFriendlies = this.getNearbyFriendlies();
+		if((seenHostiles.length > 0 && seenFriendlies.length < 5) || rc.isInfected())
+		{
+			callout = true;
+			this.rc.setIndicatorString(1, rc.getRoundNum() + ": Calling army as we are attacked by zombies.");
+		}
+
+		if(behaviour == BehaviourMode.BUILD) {
+			if (this.movedCounter > CALLOUT_MOVEMENT_THRESHOLD) {
+				callout = true;
+				this.rc.setIndicatorString(1, rc.getRoundNum() + ": Calling army as we have moved far.");
+
+				this.movedCounter = 0;
+			}
+
+			if (maxFriendliesSeenMult > 0)
+				--maxFriendliesSeenMult;
+			int currentlySeenFriendlies = seenFriendlies.length * FRIENDLIES_SEEN_MULTIPLIER;
+			if (maxFriendliesSeenMult < currentlySeenFriendlies)
+				maxFriendliesSeenMult = currentlySeenFriendlies;
+			else if (FRIENDLIES_SEEN_THRESHOLD_FRAC_MULT * maxFriendliesSeenMult / FRIENDLIES_SEEN_THRESHOLD_FRAC_DIV > currentlySeenFriendlies) {
+				callout = true;
+				this.rc.setIndicatorString(1, rc.getRoundNum() + ": Calling army as we feel lonely.");
+			}
+
+			if (!callout) {
+				if (--bigCalloutPauseCounter <= 0) {
+					callout = true;
+					bigCallout = true;
+					this.rc.setIndicatorString(1, rc.getRoundNum() + ": Calling annual army meeting. There are cupcakes.");
+					bigCalloutPauseCounter = BIG_CALLOUT_PAUSE;
+				}
+			} else {
+				if ((bigCalloutPauseCounter += BIG_CALLOUT_PAUSE_CALLOUT_INCREMENT) > BIG_CALLOUT_PAUSE) {
+					bigCalloutPauseCounter = BIG_CALLOUT_PAUSE;
+				}
+			}
+
+			this.rc.setIndicatorString(2, "Max seen number of friendlies: " + (maxFriendliesSeenMult / FRIENDLIES_SEEN_MULTIPLIER) + ", Big callout in: " + bigCalloutPauseCounter);
+		}
+		this.rc.setIndicatorString(0, "Type: " + behaviour.name());
+
+
+		if(callout) {
+			int radius = bigCallout ? 80 : behaviour == BehaviourMode.BUILD ? 15 : 5;
+			this.orderAll(radius * radius, rc.getLocation(), Protocol.Order.ADVANCE);
+		}
+
+		if(letOthersKnowIamMain)
+		{
+			rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
+			letOthersKnowIamMain = false;
+		}
+
+		if(rc.getHealth() < dyingHealth && this.behaviour == BehaviourMode.BUILD){
 			// send message to other archons with ours id
 			rc.broadcastMessageSignal(Protocol.prepareSignalType(Protocol.Type.KNOWLEDGE), 0, 80*80);
 			this.behaviour = BehaviourMode.ROAM;
@@ -134,37 +271,23 @@ public class ArchonActor extends BaseActor {
 		return max;
 	}
 
+	boolean letOthersKnowIamMain = false;
 	@Override
 	protected void recievedKnowledge(Signal signal) throws GameActionException {
-		// if I receive knowledge of archon ID
-		UnitInfo newArchon = new UnitInfo(signal);
-
-		if(otherArchons.contains(newArchon)){
-			// archon died...
-			otherArchons.remove(newArchon);
-		}else {
-			otherArchons.add(newArchon);
-		}
-
-		// if I receive knowledge of dying archon
-			// decrease archon count
-			// remove given archon from archonList
-
-		/// IF WE HAVE MINIMAL ID FROM ARCHONS:
-			UnitInfo minArchon = Collections.min(otherArchons);
-			if(rc.getID() <= minArchon.id){// we have minimal ID;
-				behaviour = BehaviourMode.BUILD;
-				this.rc.setIndicatorString(0, "Assigned as main archon.");
-				mainArchon = new UnitInfo(rc.getID(), rc.getLocation());
-			}else{
+		if(mainArchon == null)
+		{
+			mainArchon = new UnitInfo(signal);
+			if(letOthersKnowIamMain)
 				behaviour = BehaviourMode.ROAM;
-				this.rc.setIndicatorString(0, "Assigned as roaming archon.");
-				mainArchon = minArchon;
-			}
+		} else {
+			mainArchon = new UnitInfo(rc.getID(), rc.getLocation());
+			letOthersKnowIamMain = true;
+			behaviour = BehaviourMode.BUILD;
+		}
 	}
 
-	private void tryRepairAlly() throws GameActionException {
-		RobotInfo[] healableAllies = rc.senseNearbyRobots(RobotType.ARCHON.attackRadiusSquared, rc.getTeam());
+	private boolean tryRepairAlly() throws GameActionException {
+		RobotInfo[] healableAllies = this.getNearbyHealableFriendlies();
 		MapLocation bestLoc = null;
 		double lowestHealth = 10000;
 		for (RobotInfo ally : healableAllies) {
@@ -175,59 +298,49 @@ public class ArchonActor extends BaseActor {
 			}
 		}
 		if (bestLoc != null) {
-			rc.repair(bestLoc);
+			try {
+				rc.repair(bestLoc);
+			} catch(Exception e) {}
+			return true;
 		}
+		else
+			return false;
 	}
     
     private void tryMove() throws GameActionException{
-    	this.exploreNeutrals();
     	this.exploreParts();
-    	this.randomMove();    	
+    	this.randomMove();
     }
     
-    private void exploreParts(){
-		if (!rc.isCoreReady()) return;
-		MapLocation[] adjacentParts = rc.sensePartLocations(RobotType.ARCHON.sensorRadiusSquared);
-		System.out.println(adjacentParts.length);
-			int min = 10000;
-			MapLocation bestPartLoc = null;
-	
-		for(MapLocation part: adjacentParts){
-			if(part.distanceSquaredTo(rc.getLocation()) < min)
-				bestPartLoc = part;
-		}
-	
-		if(bestPartLoc != null){
-			if (rc.canMove(rc.getLocation().directionTo(bestPartLoc)) && rc.isCoreReady()) {
-					try {
-						rc.move(rc.getLocation().directionTo(bestPartLoc));
-					} catch (GameActionException e) {
-						e.printStackTrace();
-					}
-			}	
-		}	
-    }
-    
-    private void exploreNeutrals(){
-    	if (!rc.isCoreReady()) return;
-    		RobotInfo[] adjacentNeutrals = rc.senseNearbyRobots(RobotType.ARCHON.sensorRadiusSquared, Team.NEUTRAL);
-    	int min = 10000;
-    	MapLocation bestNeutralLoc = null;
-    	
-    	for(RobotInfo r : adjacentNeutrals){
-    		if(r.location.distanceSquaredTo(rc.getLocation()) < min)
-    			bestNeutralLoc = r.location;
-    	}
+    private void exploreParts() throws GameActionException {
+		if (!rc.isCoreReady())
+			return;
 
-	    if(bestNeutralLoc != null){
-	    	if (rc.canMove(rc.getLocation().directionTo(bestNeutralLoc)) && rc.isCoreReady()) {
-	    		try {
-	    			rc.move(rc.getLocation().directionTo(bestNeutralLoc));
-	    		} catch (GameActionException e) {
-	    			e.printStackTrace();
-	    		}
-	    	}	
-	    }
+		MapLocation[] nearbyParts = this.getNearbyParts();
+
+		for(MapLocation part: nearbyParts){
+			if(this.blockedByRubble(part))
+				continue;
+
+			Direction directionToPart = rc.getLocation().directionTo(part);
+			this.move(directionToPart, false);
+		}
+    }
+    
+    private void exploreNeutrals() throws GameActionException {
+    	if (!this.canMove())
+			return;
+
+		RobotInfo[] neutrals = this.getNearbyNeutrals();
+		if(neutrals.length > 0)
+		{
+			RobotInfo neutral = neutrals[0];
+			if(neutral.location.isAdjacentTo(rc.getLocation())) {
+				rc.activate(neutral.location);
+			} else {
+				this.move(rc.getLocation().directionTo(neutral.location), false);
+			}
+		}
     }
     
     /*//TODO randommove is not so good, because it moves around, we should use signals from scouts
@@ -243,13 +356,4 @@ public class ArchonActor extends BaseActor {
 			}
 		}
     }*/
-    
-    private void tryConvertNeutrals() throws GameActionException {
-		if (!rc.isCoreReady()) return;
-		RobotInfo[] adjacentNeutrals = rc.senseNearbyRobots(2, Team.NEUTRAL);
-		for (RobotInfo neutral : adjacentNeutrals) {
-			rc.activate(neutral.location);
-			return;
-		}
-	}
 }

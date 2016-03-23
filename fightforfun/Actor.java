@@ -7,7 +7,8 @@ import battlecode.common.*;
  */
 
 public class Actor {
-    public static BaseActor CastRobot(RobotController rc) {
+    public static BaseActor CastRobot(RobotController rc)
+    {
         try {
             switch (rc.getType()) {
                 case ARCHON:
@@ -18,13 +19,14 @@ public class Actor {
                     return new TurretActor(rc, 2);
                 case SOLDIER:
                     return new SoldierActor(rc, 3);
-                case VIPER:
-                	return new ViperActor(rc, 4);
+                //case VIPER:
+                //	return new ViperActor(rc, 4);
                 case SCOUT:
                     return new ScoutActor(rc, 5);
                 default:
-                    rc.setIndicatorString(1, "!! Casting failed !!");
-                    while(true) { Clock.yield(); }
+                    rc.setIndicatorString(1, "!! Casting failed, using combatant !!");
+                    return new CombatantActor(rc, 6);
+                    //while(true) { Clock.yield(); }
             }
         //}catch(GameActionException actionException) {
         //    actionException.printStackTrace();

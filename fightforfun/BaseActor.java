@@ -51,7 +51,7 @@ public abstract class BaseActor {
     }
     protected void orderAll(int distanceSquared, MapLocation location) throws GameActionException { this.orderAll(distanceSquared, location, Protocol.Order.SCATTER); }
     protected void orderAll(int distanceSquared, MapLocation location, Protocol.Order order) throws GameActionException {
-        this.rc.setIndicatorString(1, "Ordering all.");
+        //this.rc.setIndicatorString(1, "Ordering all.");
         this.rc.broadcastMessageSignal(
                 Protocol.prepareSignalType(Protocol.Type.ORDER)
                 | Protocol.prepareMapLocationSignalData(location)
@@ -61,7 +61,7 @@ public abstract class BaseActor {
     }
     protected void orderSquad(int distanceSquared, int squadId, MapLocation location) throws GameActionException { this.orderSquad(distanceSquared, squadId, location, Protocol.Order.SCATTER); }
     protected void orderSquad(int distanceSquared, int squadId, MapLocation location, Protocol.Order order) throws GameActionException {
-        this.rc.setIndicatorString(1, "Ordering squad " + squadId + ".");
+        //this.rc.setIndicatorString(1, "Ordering squad " + squadId + ".");
         this.rc.broadcastMessageSignal(
                 Protocol.prepareSignalType(Protocol.Type.ORDER)
                 | Protocol.prepareMapLocationSignalData(location)
@@ -71,7 +71,7 @@ public abstract class BaseActor {
     }
     protected void orderRobot(int distanceSquared, int robotId, MapLocation location) throws GameActionException { this.orderRobot(distanceSquared, robotId, location, Protocol.Order.SCATTER); }
     protected void orderRobot(int distanceSquared, int robotId, MapLocation location, Protocol.Order order) throws GameActionException {
-        this.rc.setIndicatorString(1, "Ordering robot " + robotId + ".");
+        //this.rc.setIndicatorString(1, "Ordering robot " + robotId + ".");
         this.rc.broadcastMessageSignal(
                 Protocol.prepareSignalType(Protocol.Type.ORDER)
                 | Protocol.prepareMapLocationSignalData(location)
@@ -85,6 +85,7 @@ public abstract class BaseActor {
     protected void orderedToScatter(int robotId, MapLocation fromWhere) throws GameActionException { this.ordered(robotId, fromWhere); }
     protected void orderedToProtect(int robotId, MapLocation where) throws GameActionException { this.ordered(robotId, where); }
     protected void orderedToAttack(int robotId, MapLocation where) throws GameActionException { this.ordered(robotId, where); }
+    protected void orderedToAdvance(int robotId, MapLocation where) throws GameActionException { this.ordered(robotId, where); }
     protected void recievedKnowledge(Signal signal)throws GameActionException {};
 
     protected void init() throws GameActionException {}
@@ -126,6 +127,10 @@ public abstract class BaseActor {
                                         this.rc.setIndicatorString(0, "Received attack " + location + " order from " + s.getRobotID() + ".");
                                         this.orderedToAttack(s.getRobotID(), location);
                                         break;
+                                    case ADVANCE:
+                                        this.rc.setIndicatorString(0, "Received advance to " + location + " order from " + s.getRobotID() + ".");
+                                        this.orderedToAdvance(s.getRobotID(), location);
+                                        break;
                                     default:
                                         this.rc.setIndicatorString(0, "Received unknown order from " + s.getRobotID() + ".");
                                         this.ordered(s.getRobotID(), location);
@@ -163,21 +168,38 @@ public abstract class BaseActor {
                 Clock.yield();
             }
         }catch(GameActionException actionException) {
+            rc.setIndicatorString(1, actionException.getMessage());
             actionException.printStackTrace();
         }catch(Exception regularException) {
             regularException.printStackTrace();
         }
     }
 
+    public void catchBreath() throws GameActionException
+    {
+        this.cut();
+
+        Clock.yield();
+
+        this.signalProcessing();
+
+        this.flap();
+    }
+
+    protected boolean blockedByRubble(MapLocation location) {
+        return rc.senseRubble(location) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH;
+    }
     protected boolean blockedByRubble(Direction direction) {
-        return rc.senseRubble(rc.getLocation().add(direction)) >= GameConstants.RUBBLE_OBSTRUCTION_THRESH;
+        return blockedByRubble(rc.getLocation().add(direction));
     }
     public boolean canMove() {
         return rc.isCoreReady();
     }
 
-    protected void randomMove(){
+    protected boolean randomMove() throws GameActionException {
             Direction d = directions[(int) (8 * Math.random())];
+            return this.move(d, false);
+            /*
             if (rc.canMove(d) && rc.isCoreReady()) {
                 try {
                     rc.move(d);
@@ -185,6 +207,11 @@ public abstract class BaseActor {
                     e.printStackTrace();
                 }
             }
+            */
+    }
+
+    public void a() {
+
     }
 
     public boolean move(Direction direction, boolean canClear) throws GameActionException {
@@ -220,11 +247,41 @@ public abstract class BaseActor {
         }
     }
 
+
+    public boolean isIdle() {
+        return this.canAttack() && this.canMove();
+    }
+
+    public RobotInfo[] getNearbyFriendlies()
+    {
+        return this.sortRobots(rc.senseNearbyRobots(rc.getType().sensorRadiusSquared, rc.getTeam()), false);
+    }
+    public RobotInfo[] getNearbyHealableFriendlies()
+    {
+        return this.sortRobots(rc.senseNearbyRobots(rc.getType().attackRadiusSquared, rc.getTeam()), false);
+    }
     public RobotInfo[] getNearbyHostiles(boolean preferZombies)
     {
-        return this.sortEnemies(rc.senseHostileRobots(rc.getLocation(), rc.getType().sensorRadiusSquared), preferZombies);
+        return this.sortRobots(rc.senseHostileRobots(rc.getLocation(), rc.getType().sensorRadiusSquared), preferZombies);
     }
-    public RobotInfo[] sortEnemies(RobotInfo[] enemies, boolean preferZombies)
+    public RobotInfo[] getNearbyNeutrals()
+    {
+        return this.sortRobots(rc.senseNearbyRobots(rc.getType().sensorRadiusSquared, Team.NEUTRAL), false);
+    }
+    public MapLocation[] getNearbyParts()
+    {
+        MapLocation[] partLocations = rc.sensePartLocations(RobotType.ARCHON.sensorRadiusSquared);
+        Arrays.sort(partLocations, new Comparator<MapLocation>() {
+            @Override
+            public int compare(MapLocation o1, MapLocation o2) {
+                return
+                        rc.getLocation().distanceSquaredTo(o1)
+                                - rc.getLocation().distanceSquaredTo(o2);
+            }
+        });
+        return partLocations;
+    }
+    public RobotInfo[] sortRobots(RobotInfo[] enemies, boolean preferZombies)
     {
         final boolean zombiesPreferred = preferZombies;
         Arrays.sort(enemies, new Comparator<RobotInfo>() {
@@ -240,8 +297,8 @@ public abstract class BaseActor {
                     }
                 }
                 return
-                    rc.getLocation().distanceSquaredTo(o2.location)
-                  - rc.getLocation().distanceSquaredTo(o1.location);
+                    rc.getLocation().distanceSquaredTo(o1.location)
+                  - rc.getLocation().distanceSquaredTo(o2.location);
             }
         });
         return enemies;

@@ -40,8 +40,8 @@ public class Protocol {
     private static final int SQUAD_ID_MASK = ROBOT_ID_MASK;
     private static final int SQUAD_ID_SHIFT = ROBOT_ID_SHIFT;
 
-    private static final int ORDER_MASK = 30;
-    private static final int ORDER_SHIFT = 0b11;
+    private static final int ORDER_MASK = 0b11;
+    private static final int ORDER_SHIFT = 30;
 
     public static int prepareSignalType(Type type) {
         return (type.ordinal() & TYPE_MASK) << TYPE_SHIFT;
